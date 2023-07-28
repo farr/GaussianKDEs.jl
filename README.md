@@ -17,10 +17,10 @@ dimension.
 
 ```julia
 using Pkg
-Pkg.install("https://github.com/farr/GaussianKDEs.jl.git")
+Pkg.add("https://github.com/farr/GaussianKDEs.jl.git")
 ```
 
-## Useage
+## Usage
 
 ```julia
 using Distributions
