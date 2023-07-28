@@ -5,13 +5,20 @@ KDE, it is probably best to use `KernelDensity.jl` (though `GaussianKDEs.jl`
 also has 1D KDEs).  However, if you want a multi-dimensional KDE, then
 `KernelDensity.jl` is limited to at most 2D, and even in 2D uses axis-aligned
 kernels to estimate the density; this package can construct KDEs in arbitrary
-dimension.
+dimension with an arbitrary covariance in the kernel.  (In fact, this package
+constructs densities that are *affine invariant*, in that the density
+constructed from some set of points will be a simple Jacobian transformation of
+the density constructed by any arbitrary shift-and-scale of the same set of
+points.)
 
 `GaussianKDEs.jl` has some other features that could be attractive:
 
 * It presents a unified interface for both 1D and multi-dimensional KDEs.
 * It allows control over the kernel bandwidth in all dimensions.
 * It implements a `BoundedKDE` type for 1D KDEs on bounded domains.
+* Gaussian KDEs are a proper `ContinuousUnivariateDistribution` and
+  `ContinuousMultivariateDistribution`, so they can be used with
+  `Distributions.jl` methods.
 
 ## Installation
 
