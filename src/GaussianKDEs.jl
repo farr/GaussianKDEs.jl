@@ -5,7 +5,7 @@ using LinearAlgebra
 using Random
 using StatsFuns
 
-export KDE, BoundedKDE
+export KDE, BoundedKDE, bw_opt_kde
 
 square(x) = x*x
 
@@ -25,28 +25,36 @@ struct BoundedKDE{T} <: ContinuousUnivariateDistribution where T <: Number
     ub::Union{T, Nothing}
 end
 
-"""
-    KDE(pts; lower=nothing, upper=nothing)
+raw"""
+    KDE(pts; bandwidth_factor=1, lower=nothing, upper=nothing)
 
 Return a kernel density object out of the given points.
 
 `pts` should have shape `(ndim, npts)` or `(npts,)` for a 1-dimensional KDE.  If
 bounds are given, the resulting object will implement a reflective boundary
 condition at the given bounds.
+
+`bandwidth_factor` is a scaling factor for the bandwidth of the KDE, relative to
+Scott's rule, with the KDE covariance matrix given by 
+
+``\Sigma_\mathrm{kde} = \frac{f^2}{N^{2/(d+4)}} \Sigma_\mathrm{data}``
+
+where ``N`` is the number of points in the KDE, ``d`` is the number of
+dimensions, and ``f`` is the bandwidth factor.
 """
-function KDE(pts::Matrix{T}) where T <: Number
+function KDE(pts::Matrix{T}; bandwidth_factor=1) where T <: Number
     nd, np = size(pts)
-    S = cov(pts') ./ np^(2/(nd+4))
+    S = (bandwidth_factor*bandwidth_factor) .* cov(pts') ./ np^(2/(nd+4))
 
     KDEnD(pts, cholesky(S))
 end
 
-function KDE(pts::Vector{T}) where T <: Number
-    KDE1D(pts, std(pts) / length(pts)^(1/5))
+function KDE(pts::Vector{T}; bandwidth_factor=1) where T <: Number
+    KDE1D(pts, bandwidth_factor * std(pts) / length(pts)^(1/5))
 end
 
-function BoundedKDE(pts::Vector{T}; lower=nothing, upper=nothing) where T <: Number
-    k = KDE(pts)
+function BoundedKDE(pts::Vector{T}; bandwidth_factor=1, lower=nothing, upper=nothing) where T <: Number
+    k = KDE(pts; bandwidth_factor=bandwidth_factor)
     if lower === nothing && upper === nothing
         error("Bounded KDE created with no bounds!")
     elseif lower === nothing
@@ -169,6 +177,57 @@ function Distributions.maximum(k::BoundedKDE{T}) where T <: Number
 end
 function Distributions.insupport(k::BoundedKDE{T}, x) where T <: Number
     (x > minimum(k)) && (x < maximum(k))
+end
+
+function golden_search(f, a, z)
+    phi = (1 + sqrt(5))/2
+
+    r = 2*phi + 1
+    d = (z-a)/r
+    b = a + phi*d
+    c = b + d
+
+    fa = f(a)
+    fz = f(z)
+    fb = f(b)
+    fc = f(c)
+
+    while abs(z-a) > 1e-8
+        if fb < fc
+            z, fz = c, fc
+            c, fc = b, fb
+            b = a + (z-c)
+            fb = f(b)
+        else
+            a, fa = b, fb
+            b, fb = c, fc
+            c = z - (b - a)
+            fc = f(c)
+        end 
+    end
+
+    return (a+z)/2
+end
+
+"""
+    bw_opt_kde(pts, test_pts; test_low=-1, test_high=1)
+
+Will return a KDE based on `pts` whose bandwidth factor maximizes the likelihood
+of `test_pts`.
+
+`test_low` and `test_high` are the bounds on the natural log of the bandwidth
+factor for the optimizing search. 
+"""
+function bw_opt_kde(pts, test_pts; test_low=-1, test_high=1)
+
+    function neg_logp(log_bw)
+        kde = KDE(pts; bandwidth_factor=exp(log_bw))
+        -sum([logpdf(kde, test_pts[:,j]) for j in axes(test_pts,2)])
+    end
+
+    bw = exp(golden_search(neg_logp, test_low, test_high))
+
+    KDE(pts; bandwidth_factor=bw)
 end
 
 end # module GaussianKDE
